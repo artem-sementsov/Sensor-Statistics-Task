@@ -1,3 +1,10 @@
 #idea
-/.idea/
+.idea/
 *.iml
+
+#maven
+dependency-reduced-pom.xml
+target/
+
+#mac
+**/*.DS_Store
