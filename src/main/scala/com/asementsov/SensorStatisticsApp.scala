@@ -67,6 +67,45 @@ object SensorStatisticsApp extends LazyLogging {
     printWriter.println(message)
   }
 
+  def getStatByFile(context: Context, inputStream: InputStream): Map[String, SensorAggStat] = {
+    val settings = new CsvParserSettings
+    settings.getFormat.setLineSeparator("\n")
+    settings.setHeaderExtractionEnabled(true)
+
+    val parser = new CsvParser(settings)
+
+    val recordIterator: Iterator[Record] = parser
+      .iterateRecords(inputStream)
+      .iterator()
+
+    val parsedRowsIterator: Iterator[Row] = recordIterator
+      .zipWithIndex
+      .flatMap {
+        case (record, idx) => Row(context.inputFile.getName, record, idx)
+      }
+
+    val batchStatIterator: Iterator[Map[String, SensorAggStat]] = parsedRowsIterator
+      .grouped(batchSize)
+      .map {
+        batch =>
+          logger.debug(Thread.currentThread().getName)
+          batch
+            .groupBy {
+              case Row(leader, _) => leader
+            }
+            .mapValues(_.map(_.measure))
+            .map {
+              case (leader, measures) =>
+                (leader, measures.map(SensorAggStat(_)).reduce(SensorAggStat.merge))
+            }
+      }
+
+    val fileStats: Map[String, SensorAggStat] = batchStatIterator
+      .reduceOption(SensorAggStat.mergeMaps).getOrElse(Map())
+
+    fileStats
+  }
+
   def generateOutput(numOfProcessedFiles: Int,
                      results: concurrent.Map[String, SensorAggStat]): String = {
     case class SensorFinalStat(leader: String, min: Int, avg: Long, max: Int, isNan: Boolean = false) {
@@ -107,52 +146,13 @@ object SensorStatisticsApp extends LazyLogging {
     messageHeader + messageBody
   }
 
-  def getStatByFile(context: Context, inputStream: InputStream): Map[String, SensorAggStat] = {
-    val settings = new CsvParserSettings
-    settings.getFormat.setLineSeparator("\n")
-    settings.setHeaderExtractionEnabled(true)
-
-    val parser = new CsvParser(settings)
-
-    val recordIterator: Iterator[Record] = parser
-      .iterateRecords(inputStream)
-      .iterator()
-
-    val parsedRowsIterator: Iterator[Row] = recordIterator
-      .zipWithIndex
-      .flatMap {
-        case (record, idx) => Row(context.inputFile.getName, record, idx)
-      }
-
-    val batchStatIterator: Iterator[Map[String, SensorAggStat]] = parsedRowsIterator
-      .grouped(batchSize)
-      .map {
-        batch =>
-          logger.debug(Thread.currentThread().getName)
-          batch
-            .groupBy {
-              case Row(leader, _) => leader
-            }
-            .mapValues(_.map(_.measure))
-            .map {
-              case (leader, measures) =>
-                (leader, measures.map(SensorAggStat(_)).reduce(SensorAggStat.merge))
-            }
-      }
-
-    val fileStats: Map[String, SensorAggStat] = batchStatIterator
-      .reduceOption(SensorAggStat.mergeMaps).getOrElse(Map())
-
-    fileStats
-  }
-
-  def toJavaBiFunction[T, U, R](f: (T, U) => R): BiFunction[T, U, R] = new BiFunction[T, U, R] {
-    override def apply(t: T, u: U): R = f(t, u)
-  }
-
   implicit def javaIteratorToScalaIterator[A](it: java.util.Iterator[A]): Iterator[A] = new Iterator[A] {
     override def hasNext: Boolean = it.hasNext
 
     override def next(): A = it.next()
+  }
+
+  def toJavaBiFunction[T, U, R](f: (T, U) => R): BiFunction[T, U, R] = new BiFunction[T, U, R] {
+    override def apply(t: T, u: U): R = f(t, u)
   }
 }
