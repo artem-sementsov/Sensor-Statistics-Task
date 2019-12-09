@@ -19,5 +19,6 @@ class SensorAggStatSpec extends FlatSpec with Matchers {
     merge(nanStat, zeroStat) shouldBe zeroStat.copy(nanCount = zeroStat.nanCount + 1)
     merge(zeroStat, nanStat) shouldBe zeroStat.copy(nanCount = zeroStat.nanCount + 1)
     merge(zeroStat, oneStat) shouldBe SensorAggStat(0, 1, 1, 2, 0)
+    merge(oneStat, singleMeasure(2)) shouldBe SensorAggStat(1, 2, 3, 2, 0)
   }
 }

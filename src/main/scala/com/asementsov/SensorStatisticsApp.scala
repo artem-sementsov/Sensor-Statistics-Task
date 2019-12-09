@@ -22,6 +22,7 @@ object SensorStatisticsApp extends LazyLogging {
 
   val batchSize = 10000
   val concurrencyLevel = 4
+  val lineSeparator = "\n"
 
   //represents application context, contains metadata that can be useful for nested processing
   case class Context(inputFile: File)
@@ -117,6 +118,9 @@ object SensorStatisticsApp extends LazyLogging {
         }
       }
     }
+
+    val output: StringBuilder = StringBuilder.newBuilder
+
     val numOfSuccessMeasurements: Int = results.values.map(_.measureCount).sum
     val numOfFailedMeasurements: Int = results.values.map(_.nanCount).sum
 
@@ -127,8 +131,8 @@ object SensorStatisticsApp extends LazyLogging {
          |
          |Sensors with highest avg humidity:
          |
-         |sensor-id,min,avg,max
-         |""".stripMargin
+         |sensor-id,min,avg,max""".stripMargin
+    output.append(messageHeader)
 
     val orderedStat: List[SensorFinalStat] = results.toList.map {
       case (leader, SensorAggStat(min, max, sum, measureCount, _)) =>
@@ -139,11 +143,11 @@ object SensorStatisticsApp extends LazyLogging {
     }
       .sortBy(_.avg.unary_-)
 
-    val messageBody: String = orderedStat
+    orderedStat
       .map(_.mkString)
-      .reduce(_ + "\n" + _)
+      .foreach(output.append(lineSeparator).append(_))
 
-    messageHeader + messageBody
+    output.mkString
   }
 
   implicit def javaIteratorToScalaIterator[A](it: java.util.Iterator[A]): Iterator[A] = new Iterator[A] {
